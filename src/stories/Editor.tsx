@@ -1,4 +1,5 @@
 import Box from "@mui/material/Box";
+import { borderLeftColor } from "@mui/system";
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
@@ -88,32 +89,42 @@ const moveCaret = (editor: HTMLElement, caretPosition: number) => {
     selection.addRange(range);
 };
 
-type Block = { type: "normal" | "label"; text: string };
+type Block = {
+    type: "normal" | "label";
+    text: string,
+    start: number,
+};
 
-const parse = (text: string, blocks: Block[] = []): Block[] => {
-    console.log(blocks);
-    console.log(text);
+const parse = (text: string, start: number, blocks: Block[] = []): Block[] => {
     if (text.length === 0) return blocks;
 
     const startIndex = text.indexOf("[");
-    if (startIndex < 0) return [...blocks, { type: "normal", text }];
+    if (startIndex < 0) return [...blocks, { type: "normal", text, start }];
 
     const endIndex = text.indexOf("]", startIndex);
-    if (endIndex < 0) return [...blocks, { type: "normal", text }];
+    if (endIndex < 0) return [...blocks, { type: "normal", text, start }];
 
-    const normalText = text.substring(0, startIndex);
-    const labelText = text.substring(startIndex, endIndex + 1);
+    let mostNearStartIndex = startIndex;
+    while (true) {
+        const tmpStartIndex = text.indexOf("[", mostNearStartIndex + 1)
+        console.log(tmpStartIndex);
+        if (tmpStartIndex < 0 || endIndex < tmpStartIndex) {
+            break;
+        }
+        mostNearStartIndex = tmpStartIndex;
+    }
+
+    const normalText = text.substring(0, mostNearStartIndex);
+    const labelText = text.substring(mostNearStartIndex, endIndex + 1);
     const remainingText = text.substring(endIndex + 1);
-    return parse(remainingText, [
+    return parse(remainingText, endIndex + 1, [
         ...blocks,
-        { type: "normal", text: normalText },
-        { type: "label", text: labelText }
+        { type: "normal", text: normalText, start },
+        { type: "label", text: labelText, start: mostNearStartIndex }
     ]);
 };
 
-const toHtml = (text: string): string => {
-    console.log(text);
-    const blocks = parse(text);
+const toHtml = (blocks: Block[]): string => {
     return blocks
         .map((block) => {
             if (block.type === "normal") {
@@ -124,29 +135,30 @@ const toHtml = (text: string): string => {
         .join("");
 };
 
+
 export const Editor = () => {
     const inputRef = React.useRef<HTMLDivElement>(null);
-    const [html, setHtml] = React.useState("");
+    const [text, setText] = React.useState("");
     const [isComposing, setIsComposing] = React.useState(false);
     const [caretPosition, setCaretPosition] = React.useState(0);
 
     React.useEffect(() => {
         const editor = inputRef.current;
         if (editor && !isComposing) {
-            editor.innerHTML = toHtml(html); // Reactの再レンダリングを防ぐ
+            const blocks = parse(text, 0);
+            editor.innerHTML = toHtml(blocks);
             document.querySelectorAll(".label").forEach((label) => {
                 const text = label.getAttribute("data-text");
                 createRoot(label).render(<Label>{text}</Label>);
             });
-
             moveCaret(editor, caretPosition);
         }
-    }, [html, isComposing]);
+    }, [text, isComposing]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         if (!isComposing) {
             setCaretPosition(getCaretPosition(e.currentTarget));
-            setHtml(e.currentTarget.innerHTML);
+            setText(e.currentTarget.innerText);
         }
     };
 
@@ -158,7 +170,7 @@ export const Editor = () => {
         const newCaretPosition = getCaretPosition(e.currentTarget);
         setIsComposing(false);
         setCaretPosition(newCaretPosition);
-        setHtml(e.currentTarget.innerHTML);
+        setText(e.currentTarget.innerText);
     };
 
     return (

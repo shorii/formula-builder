@@ -1,0 +1,27 @@
+.editable-container {
+  position: relative;
+  width: 300px;
+  margin: 20px auto;
+}
+
+.editable {
+  border: 1px solid #ccc;
+  padding: 10px;
+  min-height: 100px;
+  outline: none; /* デフォルトのフォーカスアウトラインを削除 */
+}
+
+.custom-caret {
+  position: absolute;
+  width: 2px;
+  height: 20px;
+  background-color: black;
+  animation: blink 0.8s infinite;
+  pointer-events: none; /* キャレットがクリックを妨げないように */
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}

@@ -1,5 +1,4 @@
 import Box from "@mui/material/Box";
-import { borderLeftColor } from "@mui/system";
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
@@ -44,14 +43,29 @@ const countChars = (
 };
 
 
-const getCaretPosition = (editor: HTMLElement): number => {
+const getCaretPosition = (editor: HTMLElement, text: string, oldBlocks: Block[]): number => {
     const selection = document.getSelection();
     if (selection == null) return 0;
+
+    let focusOffset = selection.focusOffset;
+    const oldLabelBlocks = oldBlocks.filter(b => b.type === "label");
+    const newLabelBlocks = parse(text, 0).filter(b => b.type === "label");
+    if (oldLabelBlocks.length < newLabelBlocks.length) {
+        const createdBlock = newLabelBlocks.find(newLabelBlock => {
+            const rawLabelBlockEnd = newLabelBlock.start + newLabelBlock.text.length;
+            return rawLabelBlockEnd === focusOffset;
+        });
+        if (!createdBlock) {
+            throw Error();
+        }
+        const adjustment = createdBlock.text.length - 1;
+        focusOffset -= adjustment;
+    }
 
     const target = selection.focusNode;
     if (target == null || editor === target) return 0;
 
-    return countChars([editor], target) + selection?.focusOffset;
+    return countChars([editor], target) + focusOffset;
 };
 
 
@@ -107,7 +121,6 @@ const parse = (text: string, start: number, blocks: Block[] = []): Block[] => {
     let mostNearStartIndex = startIndex;
     while (true) {
         const tmpStartIndex = text.indexOf("[", mostNearStartIndex + 1)
-        console.log(tmpStartIndex);
         if (tmpStartIndex < 0 || endIndex < tmpStartIndex) {
             break;
         }
@@ -139,6 +152,7 @@ const toHtml = (blocks: Block[]): string => {
 export const Editor = () => {
     const inputRef = React.useRef<HTMLDivElement>(null);
     const [text, setText] = React.useState("");
+    const [blocks, setBlocks] = React.useState<Block[]>([]);
     const [isComposing, setIsComposing] = React.useState(false);
     const [caretPosition, setCaretPosition] = React.useState(0);
 
@@ -152,13 +166,15 @@ export const Editor = () => {
                 createRoot(label).render(<Label>{text}</Label>);
             });
             moveCaret(editor, caretPosition);
+            setBlocks(blocks);
         }
     }, [text, isComposing]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         if (!isComposing) {
-            setCaretPosition(getCaretPosition(e.currentTarget));
-            setText(e.currentTarget.innerText);
+            const text = e.currentTarget.innerText;
+            setCaretPosition(getCaretPosition(e.currentTarget, text, blocks));
+            setText(text);
         }
     };
 
@@ -167,10 +183,11 @@ export const Editor = () => {
     };
 
     const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
-        const newCaretPosition = getCaretPosition(e.currentTarget);
+        const text = e.currentTarget.innerText;
+        const newCaretPosition = getCaretPosition(e.currentTarget, text, blocks);
         setIsComposing(false);
         setCaretPosition(newCaretPosition);
-        setText(e.currentTarget.innerText);
+        setText(text);
     };
 
     return (

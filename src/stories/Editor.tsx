@@ -55,11 +55,14 @@ const getCaretPosition = (editor: HTMLElement, text: string, oldBlocks: Block[])
             const rawLabelBlockEnd = newLabelBlock.start + newLabelBlock.text.length;
             return rawLabelBlockEnd === focusOffset;
         });
-        if (!createdBlock) {
-            throw Error();
+        if (createdBlock) {
+            // "["から入力した場合
+            const adjustment = createdBlock.text.length - 1;
+            focusOffset -= adjustment;
+        } else {
+            // "]"から入力した場合
+            focusOffset -= 1;
         }
-        const adjustment = createdBlock.text.length - 1;
-        focusOffset -= adjustment;
     }
 
     const target = selection.focusNode;

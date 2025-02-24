@@ -43,33 +43,47 @@ const countChars = (
 };
 
 
-const getCaretPosition = (editor: HTMLElement, text: string, oldBlocks: Block[]): number => {
+const getCaretPosition = (editor: HTMLElement, text: string, oldText: string, oldCaretPosition: number, key: string): number => {
     const selection = document.getSelection();
     if (selection == null) return 0;
 
-    let focusOffset = selection.focusOffset;
-    const oldLabelBlocks = oldBlocks.filter(b => b.type === "label");
-    const newLabelBlocks = parse(text, 0).filter(b => b.type === "label");
-    if (oldLabelBlocks.length < newLabelBlocks.length) {
-        const createdBlock = newLabelBlocks.find(newLabelBlock => {
-            const rawLabelBlockEnd = newLabelBlock.start + newLabelBlock.text.length;
-            return rawLabelBlockEnd === focusOffset;
-        });
-        if (createdBlock) {
-            // "["から入力した場合
-            const adjustment = createdBlock.text.length - 1;
-            focusOffset -= adjustment;
-        } else {
-            // "]"から入力した場合
-            focusOffset -= 1;
+    if (text.length >= oldText.length) {
+        let focusOffset = selection.focusOffset;
+        const oldLabelBlocks = parse(oldText, 0).filter(b => b.type === "label");
+        const newLabelBlocks = parse(text, 0).filter(b => b.type === "label");
+        if (oldLabelBlocks.length < newLabelBlocks.length) {
+            const createdBlock = newLabelBlocks.find(newLabelBlock => {
+                const rawLabelBlockEnd = newLabelBlock.start + newLabelBlock.text.length;
+                return rawLabelBlockEnd === focusOffset;
+            });
+            if (createdBlock) {
+                // "["から入力した場合
+                const adjustment = createdBlock.text.length - 1;
+                focusOffset -= adjustment;
+            } else {
+                // "]"から入力した場合
+                focusOffset -= 1;
+            }
         }
+        const target = selection.focusNode;
+        if (target == null || editor === target) return 0;
+
+        return countChars([editor], target) + focusOffset;
+    } else {
+        const adjustment = key === "Delete" ? 0 : oldText.length - text.length;
+        return oldCaretPosition - adjustment;
     }
+};
 
+const getSimpleCaretPosition = (editor: HTMLElement): number => {
+    const selection = document.getSelection();
+    if (selection == null) return 0;
+    const focusOffset = selection.focusOffset;
     const target = selection.focusNode;
-    if (target == null || editor === target) return 0;
-
+    if (target == null) return 0;
     return countChars([editor], target) + focusOffset;
 };
+
 
 
 const moveCaret = (editor: HTMLElement, caretPosition: number) => {
@@ -155,7 +169,8 @@ const toHtml = (blocks: Block[]): string => {
 export const Editor = () => {
     const inputRef = React.useRef<HTMLDivElement>(null);
     const [text, setText] = React.useState("");
-    const [blocks, setBlocks] = React.useState<Block[]>([]);
+    const [key, setKey] = React.useState("");
+    const [oldText, setOldText] = React.useState("");
     const [isComposing, setIsComposing] = React.useState(false);
     const [caretPosition, setCaretPosition] = React.useState(0);
 
@@ -169,14 +184,14 @@ export const Editor = () => {
                 createRoot(label).render(<Label>{text}</Label>);
             });
             moveCaret(editor, caretPosition);
-            setBlocks(blocks);
+            setOldText(text);
         }
     }, [text, isComposing]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         if (!isComposing) {
             const text = e.currentTarget.innerText;
-            setCaretPosition(getCaretPosition(e.currentTarget, text, blocks));
+            setCaretPosition(getCaretPosition(e.currentTarget, text, oldText, caretPosition, key));
             setText(text);
         }
     };
@@ -187,10 +202,18 @@ export const Editor = () => {
 
     const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
         const text = e.currentTarget.innerText;
-        const newCaretPosition = getCaretPosition(e.currentTarget, text, blocks);
+        const newCaretPosition = getCaretPosition(e.currentTarget, text, oldText, caretPosition, key);
         setIsComposing(false);
         setCaretPosition(newCaretPosition);
         setText(text);
+    };
+    const handleClick = (e: React.MouseEvent<HTMLElement>) => {
+        setCaretPosition(getSimpleCaretPosition(e.currentTarget));
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+        setKey(e.key);
+        setCaretPosition(getSimpleCaretPosition(e.currentTarget));
     };
 
     return (
@@ -215,7 +238,9 @@ export const Editor = () => {
                     flexGrow: 1,
                     maxWidth: "100%",
                 }}
+                onClick={handleClick}
                 onInput={handleInput}
+                onKeyDown={handleKeyDown}
                 contentEditable
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
